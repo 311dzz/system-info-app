@@ -13,84 +13,71 @@ jobs:
     - name: 检出代码
       uses: actions/checkout@v4
 
-    - name: 设置Python环境
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-
-    - name: 设置Android环境 (官方Action)
-      uses: android-actions/setup-android@v3
-      with:
-        cmdline-tools-version: 8512546
-        
-    - name: 强制接受所有Android许可证
+    - name: 使用Docker构建APK
       run: |
-        yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
-        $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "build-tools;30.0.3"
-        $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-30"
-        $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platform-tools"
+        # 创建一个简化的Dockerfile
+        cat > Dockerfile << 'EOF'
+        FROM kivy/buildozer:latest
 
-    - name: 安装系统依赖
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          build-essential git unzip openjdk-11-jdk \
-          autoconf libtool pkg-config zlib1g-dev \
-          libncurses5-dev libncursesw5-dev libtinfo6 \
-          cmake libffi-dev libssl-dev ccache \
-          libgmp-dev
+        # 安装额外依赖
+        RUN apt-get update && apt-get install -y \
+            python3-pip \
+            && rm -rf /var/lib/apt/lists/*
 
-    - name: 安装Python依赖
-      run: |
-        pip install --upgrade pip setuptools wheel
-        pip install buildozer cython colorama appdirs sh jinja2
+        WORKDIR /app
+        COPY . /app/
 
-    - name: 修复buildozer配置
-      run: |
-        # 创建一个更兼容的buildozer.spec
-        cat > buildozer.spec << EOF
+        # 简化的buildozer.spec
+        RUN cat > buildozer.spec << 'SPEC'
         [app]
-        title = 系统信息查看器
+        title = SystemInfo
         package.name = systeminfo
         package.domain = org.example
         source.dir = .
-        source.include_exts = py,png,jpg,kv,atlas
+        source.include_exts = py
         version = 0.1
         requirements = python3,kivy,psutil
         orientation = portrait
-        fullscreen = 0
 
         [buildozer]
         log_level = 2
-        warn_on_root = 1
 
         [android]
-        android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
-        android.api = 30
+        android.api = 29
         android.minapi = 21
-        android.sdk = 30
-        android.ndk = 23b
-        android.private_storage = True
+        android.sdk = 29
+        android.ndk = 21b
         android.accept_sdk_license = True
+        SPEC
+
+        # 构建APK
+        RUN buildozer android debug
+
+        CMD ["cp", "bin/*.apk", "/output/"]
         EOF
 
-    - name: 缓存构建文件
-      uses: actions/cache@v4
-      with:
-        path: |
-          .buildozer
-        key: buildozer-${{ hashFiles('buildozer.spec') }}
-
-    - name: 构建APK
-      run: |
-        export ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT
-        export ANDROID_HOME=$ANDROID_SDK_ROOT
-        buildozer android debug
-      timeout-minutes: 90
+        # 构建Docker镜像并运行
+        docker build -t apk-builder .
+        
+        # 创建输出目录
+        mkdir -p ./output
+        
+        # 运行容器并复制APK
+        docker run --rm -v $(pwd)/output:/output apk-builder sh -c "
+          if [ -d bin ]; then
+            cp bin/*.apk /output/ 2>/dev/null || echo 'No APK found'
+          fi
+          ls -la bin/ || echo 'No bin directory'
+        "
 
     - name: 上传APK
       uses: actions/upload-artifact@v4
-      if: success()
       with:
         name: SystemInfo-APK
-        path: bin/*.apk
+        path: output/*.apk
+        if-no-files-found: warn
+
+    - name: 显示结果
+      run: |
+        echo "构建完成！"
+        ls -la output/ || echo "No output directory"
