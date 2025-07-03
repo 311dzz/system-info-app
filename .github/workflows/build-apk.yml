@@ -13,71 +13,54 @@ jobs:
     - name: 检出代码
       uses: actions/checkout@v4
 
-    - name: 使用Docker构建APK
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: 设置Java环境
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: '11'
+
+    - name: 安装系统依赖
       run: |
-        # 创建一个简化的Dockerfile
-        cat > Dockerfile << 'EOF'
-        FROM kivy/buildozer:latest
+        sudo apt-get update
+        sudo apt-get install -y \
+          git zip unzip openjdk-11-jdk \
+          autoconf libtool pkg-config \
+          zlib1g-dev libncurses5-dev \
+          libncursesw5-dev libtinfo6 \
+          cmake libffi-dev libssl-dev
 
-        # 安装额外依赖
-        RUN apt-get update && apt-get install -y \
-            python3-pip \
-            && rm -rf /var/lib/apt/lists/*
+    - name: 安装Buildozer
+      run: |
+        pip install --upgrade pip
+        pip install buildozer cython
 
-        WORKDIR /app
-        COPY . /app/
+    - name: 修复buildozer.spec（关键修复）
+      run: |
+        # 在现有buildozer.spec中添加关键配置
+        echo "" >> buildozer.spec
+        echo "android.accept_sdk_license = True" >> buildozer.spec
+        echo "android.skip_update = False" >> buildozer.spec
 
-        # 简化的buildozer.spec
-        RUN cat > buildozer.spec << 'SPEC'
-        [app]
-        title = SystemInfo
-        package.name = systeminfo
-        package.domain = org.example
-        source.dir = .
-        source.include_exts = py
-        version = 0.1
-        requirements = python3,kivy,psutil
-        orientation = portrait
+    - name: 强制创建Android SDK目录结构
+      run: |
+        export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
+        mkdir -p $ANDROID_HOME/licenses
+        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_HOME/licenses/android-sdk-license
+        echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $ANDROID_HOME/licenses/android-sdk-license
 
-        [buildozer]
-        log_level = 2
-
-        [android]
-        android.api = 29
-        android.minapi = 21
-        android.sdk = 29
-        android.ndk = 21b
-        android.accept_sdk_license = True
-        SPEC
-
-        # 构建APK
-        RUN buildozer android debug
-
-        CMD ["cp", "bin/*.apk", "/output/"]
-        EOF
-
-        # 构建Docker镜像并运行
-        docker build -t apk-builder .
-        
-        # 创建输出目录
-        mkdir -p ./output
-        
-        # 运行容器并复制APK
-        docker run --rm -v $(pwd)/output:/output apk-builder sh -c "
-          if [ -d bin ]; then
-            cp bin/*.apk /output/ 2>/dev/null || echo 'No APK found'
-          fi
-          ls -la bin/ || echo 'No bin directory'
-        "
+    - name: 构建APK
+      run: |
+        buildozer android debug
+      timeout-minutes: 60
 
     - name: 上传APK
       uses: actions/upload-artifact@v4
+      if: success()
       with:
         name: SystemInfo-APK
-        path: output/*.apk
-        if-no-files-found: warn
-
-    - name: 显示结果
-      run: |
-        echo "构建完成！"
-        ls -la output/ || echo "No output directory"
+        path: bin/*.apk
