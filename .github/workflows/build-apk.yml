@@ -39,21 +39,48 @@ jobs:
         pip install --upgrade pip
         pip install buildozer cython
 
-    - name: 修复buildozer.spec（关键修复）
+    - name: 修复buildozer.spec配置
       run: |
-        # 在现有buildozer.spec中添加关键配置
-        echo "" >> buildozer.spec
+        # 使用更兼容的Android版本
+        sed -i 's/android.api = 31/android.api = 30/' buildozer.spec
+        sed -i 's/android.ndk = 23b/android.ndk = 21b/' buildozer.spec
         echo "android.accept_sdk_license = True" >> buildozer.spec
-        echo "android.skip_update = False" >> buildozer.spec
 
-    - name: 强制创建Android SDK目录结构
+    - name: 预创建SDK目录和许可证
       run: |
-        export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
-        mkdir -p $ANDROID_HOME/licenses
-        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_HOME/licenses/android-sdk-license
-        echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $ANDROID_HOME/licenses/android-sdk-license
+        mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
+        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
 
-    - name: 构建APK
+    - name: 初始化Buildozer (但不构建)
+      run: |
+        # 让buildozer下载SDK，但在sdkmanager步骤前停止
+        timeout 300 buildozer android debug || true
+
+    - name: 修复SDK工具路径
+      run: |
+        SDK_PATH=$HOME/.buildozer/android/platform/android-sdk
+        
+        # 如果cmdline-tools存在，创建旧路径的软链接
+        if [ -d "$SDK_PATH/cmdline-tools" ]; then
+          mkdir -p $SDK_PATH/tools/bin
+          ln -sf $SDK_PATH/cmdline-tools/latest/bin/sdkmanager $SDK_PATH/tools/bin/sdkmanager
+          ln -sf $SDK_PATH/cmdline-tools/latest/bin/avdmanager $SDK_PATH/tools/bin/avdmanager
+        fi
+        
+        # 如果还是没有，就下载commandlinetools
+        if [ ! -f "$SDK_PATH/tools/bin/sdkmanager" ]; then
+          cd $SDK_PATH
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip
+          unzip -q commandlinetools-linux-8512546_latest.zip
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+          mkdir -p tools/bin
+          ln -sf $SDK_PATH/cmdline-tools/latest/bin/sdkmanager tools/bin/sdkmanager
+          ln -sf $SDK_PATH/cmdline-tools/latest/bin/avdmanager tools/bin/avdmanager
+        fi
+
+    - name: 现在构建APK
       run: |
         buildozer android debug
       timeout-minutes: 60
