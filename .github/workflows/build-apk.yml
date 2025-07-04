@@ -31,8 +31,11 @@ jobs:
         pip install cython
         pip install buildozer
         
+    - name: Set ANDROID_SDK_ROOT
+      run: echo "ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk" >> $GITHUB_ENV
+
     - name: Accept Android SDK licenses
-      run: yes | sdkmanager --licenses || true
+      run: yes | $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
         
     - name: Build APK
       run: |
