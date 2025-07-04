@@ -35,7 +35,7 @@ jobs:
         buildozer android debug
         
     - name: Upload APK artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: system-info-apk
         path: bin/*.apk
@@ -67,4 +67,4 @@ jobs:
           - 自动构建版本 ${{ github.run_number }}
           - 构建时间: ${{ github.event.head_commit.timestamp }}
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
