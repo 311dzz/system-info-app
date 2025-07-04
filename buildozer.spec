@@ -59,6 +59,9 @@ android.ndk = 23b
 # (bool) Use --private data storage (True) or --dir public storage (False)
 android.private_storage = True
 
+# 指定build-tools版本，避免过新导致许可协议无法自动接受
+android.build_tools_version = 34.0.0
+
 [ios]
 
 # (str) Path to a custom kivy-ios folder
