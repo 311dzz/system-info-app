@@ -1,93 +1,70 @@
-name: 构建Android APK
+name: Build Android APK
 
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch:
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # 允许手动触发
 
 jobs:
-  build-apk:
+  build:
     runs-on: ubuntu-latest
     
     steps:
-    - name: 检出代码
+    - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: 设置Python环境
+      
+    - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.9'
-
-    - name: 设置Java环境
-      uses: actions/setup-java@v3
-      with:
-        distribution: 'temurin'
-        java-version: '11'
-
-    - name: 安装系统依赖
+        
+    - name: Install system dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          git zip unzip openjdk-11-jdk \
-          autoconf libtool pkg-config \
-          zlib1g-dev libncurses5-dev \
-          libncursesw5-dev libtinfo6 \
-          cmake libffi-dev libssl-dev
-
-    - name: 安装Buildozer
+        sudo apt update
+        sudo apt install -y git zip unzip openjdk-8-jdk autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
+        
+    - name: Install Buildozer
       run: |
         pip install --upgrade pip
-        pip install buildozer cython
-
-    - name: 修复buildozer.spec配置
-      run: |
-        # 使用更兼容的Android版本
-        sed -i 's/android.api = 31/android.api = 30/' buildozer.spec
-        sed -i 's/android.ndk = 23b/android.ndk = 21b/' buildozer.spec
-        echo "android.accept_sdk_license = True" >> buildozer.spec
-
-    - name: 预创建SDK目录和许可证
-      run: |
-        mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
-        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-        echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-
-    - name: 初始化Buildozer (但不构建)
-      run: |
-        # 让buildozer下载SDK，但在sdkmanager步骤前停止
-        timeout 300 buildozer android debug || true
-
-    - name: 修复SDK工具路径
-      run: |
-        SDK_PATH=$HOME/.buildozer/android/platform/android-sdk
+        pip install buildozer
         
-        # 如果cmdline-tools存在，创建旧路径的软链接
-        if [ -d "$SDK_PATH/cmdline-tools" ]; then
-          mkdir -p $SDK_PATH/tools/bin
-          ln -sf $SDK_PATH/cmdline-tools/latest/bin/sdkmanager $SDK_PATH/tools/bin/sdkmanager
-          ln -sf $SDK_PATH/cmdline-tools/latest/bin/avdmanager $SDK_PATH/tools/bin/avdmanager
-        fi
-        
-        # 如果还是没有，就下载commandlinetools
-        if [ ! -f "$SDK_PATH/tools/bin/sdkmanager" ]; then
-          cd $SDK_PATH
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip
-          unzip -q commandlinetools-linux-8512546_latest.zip
-          mkdir -p cmdline-tools/latest
-          mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
-          mkdir -p tools/bin
-          ln -sf $SDK_PATH/cmdline-tools/latest/bin/sdkmanager tools/bin/sdkmanager
-          ln -sf $SDK_PATH/cmdline-tools/latest/bin/avdmanager tools/bin/avdmanager
-        fi
-
-    - name: 现在构建APK
+    - name: Build APK
       run: |
         buildozer android debug
-      timeout-minutes: 60
-
-    - name: 上传APK
-      uses: actions/upload-artifact@v4
-      if: success()
+        
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v3
       with:
-        name: SystemInfo-APK
+        name: system-info-apk
         path: bin/*.apk
+        retention-days: 30
+        
+    - name: Create Release
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: bin/*.apk
+        tag_name: v${{ github.run_number }}
+        name: 系统信息查看器 v${{ github.run_number }}
+        body: |
+          ## 系统信息查看器 Android APK
+          
+          ### 功能特性
+          - 📱 系统基本信息查看
+          - 🔋 电池状态监控
+          - 💾 内存和存储信息
+          - 🌐 网络使用统计
+          - ⚡ CPU使用率监控
+          
+          ### 安装说明
+          1. 下载APK文件
+          2. 允许安装未知来源应用
+          3. 安装并运行
+          
+          ### 更新内容
+          - 自动构建版本 ${{ github.run_number }}
+          - 构建时间: ${{ github.event.head_commit.timestamp }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
