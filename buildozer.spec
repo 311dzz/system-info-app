@@ -45,7 +45,7 @@ android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 #android.entrypoint = org.kivy.android.PythonActivity
 
 # (int) Target Android API, should be as high as possible.
-android.api = 30
+android.api = 29
 
 # (int) Minimum API your APK will support.
 android.minapi = 21
@@ -60,7 +60,7 @@ android.ndk = 23b
 android.private_storage = True
 
 # 指定build-tools版本，避免过新导致许可协议无法自动接受
-android.build_tools_version = 34.0.0
+android.build_tools_version = 33.0.0
 
 [ios]
 
